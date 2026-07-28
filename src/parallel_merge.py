@@ -156,15 +156,14 @@ def process_line_by_line(positive_triggers_t, events_t, events_x_coord, events_y
 
             merged[i, x, y] += val
 
-    return [merged[i, int(pixel_per_mm * 3):-int(pixel_per_mm * 3), :].copy() for i in range(total_lines)]
-
+    return [merged[i, :, :].copy() for i in range(total_lines)]
 
 @njit(parallel=True)
 def process_line_by_line_45deg(positive_triggers_t, events_t, events_x_coord, events_y_coord, events_p,
                       total_lines, num_trigger_per_line, mm_per_move, pixel_per_mm,
-                      trigger_interval_x, merged_height, merged_width, manual_shift, axis):
+                      trigger_interval_x, merged_height, merged_width, manual_shift, axis, scale_factor=1):
 
-    merged = np.zeros((total_lines, merged_height, merged_width), dtype=np.int16)
+    merged = np.zeros((total_lines, merged_height//scale_factor, merged_width), dtype=np.int8)
     sqrt_2 = np.sqrt(2)
 
     for i in prange(total_lines):
@@ -194,13 +193,73 @@ def process_line_by_line_45deg(positive_triggers_t, events_t, events_x_coord, ev
             y = int(events_y_coord[j] / sqrt_2 + events_x_coord[j] / sqrt_2)
 
             if i % 2 == 0:
-                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + pixel_per_mm * 3 + events_x_coord[j] / sqrt_2 - events_y_coord[j] / sqrt_2)
+                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + events_x_coord[j] / sqrt_2 - events_y_coord[j] / sqrt_2 + 640 * (1 + sqrt_2 / 2))
                 val = 1 if events_p[j] == 1 else -1
             else:
-                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + pixel_per_mm * 3 + 1280 - events_x_coord[j] / sqrt_2 + events_y_coord[j] / sqrt_2) 
+                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + 640 * (1 - sqrt_2 / 2 ) - events_x_coord[j] / sqrt_2 + events_y_coord[j] / sqrt_2) 
                 x = merged_height - x - manual_shift
                 val = -1 if events_p[j] == 1 else 1
 
+            x = x // scale_factor
+            
             merged[i, x, y] += val
 
-    return [merged[i, int(pixel_per_mm * 3):-int(pixel_per_mm * 3), :].copy() for i in range(total_lines)]
+        # merged[i, 0:int(3 * pixel_per_mm + merged_width + manual_shift), :] = 0
+        # merged[i, -int(3 * pixel_per_mm + merged_width + manual_shift):, :] = 0
+
+    return [merged[i, :, :].copy() for i in range(total_lines)]
+
+
+@njit(parallel=True)
+def process_line_by_line_n_deg(positive_triggers_t, events_t, events_x_coord, events_y_coord, events_p,
+                      total_lines, num_trigger_per_line, mm_per_move, pixel_per_mm,
+                      trigger_interval_x, merged_height, merged_width, manual_shift, axis, scale_factor=1, deg=45):
+
+    merged = np.zeros((total_lines, merged_height//scale_factor, merged_width//scale_factor), dtype=np.int8)
+
+    cos_deg = np.cos(deg * np.pi / 180)
+    sin_deg = np.sin(deg * np.pi / 180)
+
+    for i in prange(total_lines):
+        start_idx = i * num_trigger_per_line
+        end_idx = (i + 1) * num_trigger_per_line
+        triggers = positive_triggers_t[start_idx:end_idx]
+
+        if triggers.shape[0] < 2:
+            continue  # skip empty or incomplete lines
+
+        first_trigger = triggers[0]
+        last_trigger = triggers[-1]
+
+        for j in range(events_t.shape[0]):
+            t = events_t[j]
+            if t <= first_trigger or t >= last_trigger:
+                continue
+
+            trig_idx = np.searchsorted(triggers, t)
+            if trig_idx == 0 or trig_idx >= triggers.shape[0]:
+                continue
+
+            t1 = triggers[trig_idx - 1]
+            t2 = triggers[trig_idx]
+            ratio = (t - t1) / (t2 - t1 + 1e-8)
+            
+            y = int(events_y_coord[j] * cos_deg + events_x_coord[j] * sin_deg)
+
+            if i % 2 == 0:
+                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + events_x_coord[j] * cos_deg - events_y_coord[j] * sin_deg + 640 * (1 + np.sqrt(2) / 2))
+                val = 1 if events_p[j] == 1 else -1
+            else:
+                x = int(((ratio + trig_idx - 1) * trigger_interval_x * pixel_per_mm) + 640 * (1 - np.sqrt(2) / 2) - events_x_coord[j] * cos_deg + events_y_coord[j] * sin_deg) 
+                x = merged_height - x - manual_shift
+                val = -1 if events_p[j] == 1 else 1
+
+            x = x // scale_factor
+            y = y // scale_factor
+            
+            merged[i, x, y] += val
+
+        # merged[i, 0:int(3 * pixel_per_mm + merged_width + manual_shift), :] = 0
+        # merged[i, -int(3 * pixel_per_mm + merged_width + manual_shift):, :] = 0
+
+    return [merged[i, :, :].copy() for i in range(total_lines)]

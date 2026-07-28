@@ -151,6 +151,17 @@ merge. Note `results/` is git-ignored, so these intermediate files need to be pr
 locally (by running the two notebooks above) before any downstream step that depends
 on them.
 
+**Focal stack scans.** A focal stack recording captures multiple focal-depth "layers" in
+a single raw scan, with each layer occupying its own band of sensor rows. Use
+[`src/merging_events_focal_stack.ipynb`](src/merging_events_focal_stack.ipynb) instead of
+`merging_events_x.ipynb` / `merging_events_y.ipynb` for this data — the only difference
+is that the temporal-to-spatial mapping (`process_line_by_line_n_deg`, the focal-stack
+counterpart of `process_line_by_line`) is done separately for each layer's group of
+lines, by filtering events to that layer's row band (`y_min`/`y_max`, set via the
+`layer` variable) before merging. Everything downstream — gradient registration,
+Poisson/TV-L1 reconstruction — is identical to the grayscale pipeline, just run
+per-layer against `results/focal_stack/<layer>/`.
+
 ## Gradient Registration
 
 The x- and y-direction scans are two independent physical passes of the scanner, so the
@@ -182,6 +193,22 @@ map has to be registered onto the x-gradient map's coordinate frame. This is don
    `test_shift_x.npy` and `test_shift_y_warp.npy` — normalized to `[-1, 1]`, ready to be
    fed together into a Poisson/TV-L1 solver the same way `events_merged_x_cropped` /
    `events_merged_y_cropped` are in the simulation section.
+
+## RGB Reconstruction
+
+For RGB (color) reconstruction, use
+[`src/registration_to_green_x.ipynb`](src/registration_to_green_x.ipynb) to register all
+RGB+XY gradient data (6 files: x- and y-gradients for each of the R, G, B channels) onto
+the green channel's x-gradient (`green_x`), which serves as the common reference frame —
+the same coarse (`phase_cross_correlation`) + fine (optical-flow `warp`) alignment
+approach as [Gradient Registration](#gradient-registration) above, generalized across
+channels. Set `folder_name`/`target_dir`/`axis` at the top of the notebook and rerun it
+once per non-reference file (`r_x`, `r_y`, `g_y`, `b_x`, `b_y`) — `target_dir` stays
+pointed at the green channel's folder throughout, while `folder_name` points at the
+channel being registered; `green_x` itself needs no registration and is used as-is.
+
+The registered RGB gradient data is available in the `results` folder on Google Drive
+(linked at the top of this README).
 
 ## Real-World Grayscale Reconstruction
 

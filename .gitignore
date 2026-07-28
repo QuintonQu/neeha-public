@@ -1,6 +1,10 @@
 src/__pycache__/
 data/grayscale_example/
 data/segmentation_example/my_scan_events/
+data/paper_rgb/
+data/focal_stack/
+results/paper_rgb/
 results/grayscale_example/image_registration/test_shift_x.npy
 results/grayscale_example/image_registration/test_shift_y_warp.npy
 results/grayscale_example/reconstruction_l1/test_shift_reconstructed.npy
+results/calibration_focal_stack/
