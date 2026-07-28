@@ -1,3 +1,5 @@
 src/__pycache__/
 data/grayscale_example/
-results/gray_scale_example/image_registration/
+results/grayscale_example/image_registration/test_shift_x.npy
+results/grayscale_example/image_registration/test_shift_y_warp.npy
+results/grayscale_example/reconstruction_l1/test_shift_reconstructed.npy
