@@ -177,3 +177,35 @@ map has to be registered onto the x-gradient map's coordinate frame. This is don
    `test_shift_x.npy` and `test_shift_y_warp.npy` — normalized to `[-1, 1]`, ready to be
    fed together into a Poisson/TV-L1 solver the same way `events_merged_x_cropped` /
    `events_merged_y_cropped` are in the simulation section.
+
+## Real-World Grayscale Reconstruction
+
+[`src/reconstruction.ipynb`](src/reconstruction.ipynb) is the final step of the real-data
+pipeline: it takes the registered x/y gradient pair produced above and reconstructs the
+grayscale slide image, the real-data counterpart of the *Reconstruction* step in the
+simulation section above.
+
+**Input.** `test_shift_x.npy` and `test_shift_y_warp.npy` from
+`results/grayscale_example/image_registration/`.
+
+**Solving.** The gradient pair is fed into the same TV-L1 Poisson solver used in the
+simulation pipeline (`tvl1_poisson_solver.tv_l1_reconstruction_cuda`, run under
+`torch.no_grad()` on GPU `cuda:1`, `lambda_tv=1.0`, `n_iters=5000`) to invert the
+gradients back into an intensity image. The FFT-based direct solver
+(`fft_poisson_solver.poisson_solver_with_brightness`) is included as a commented-out,
+faster alternative.
+
+**Post-processing.** As in the simulation section, the raw reconstruction is
+min-max normalized, exponentiated (to undo the log-domain scanning), and gamma-corrected
+(`gamma=2.2`), then passed through the same histogram-based auto-HDR exposure adjustment
+to produce `test_shift_reconstructed.png` / `test_shift_reconstructed_hdr.png`.
+
+**Patch-wise auto-HDR (optimized).** Because slide-scale images have spatially varying
+dynamic range, a second, GPU-vectorized auto-HDR pass (`auto_hdr_vectorized`) is applied
+per-patch instead of globally: overlapping `100x100` patches (stride 2) are batched
+(`batch_size=1024`), each patch's own histogram-based low/high exposure points are
+computed in parallel via `torch.searchsorted`, and the per-patch results are blended back
+together with an overlap-count accumulator. Patches with very low dynamic range that are
+already bright (`range < 0.15` and `min > 0.5`) are saturated to white instead of being
+over-stretched. The result is written to
+`results/grayscale_example/reconstruction_l1/test_shift_reconstructed_auto_hdr_optimized.png`.
