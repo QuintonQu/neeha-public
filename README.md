@@ -49,6 +49,25 @@ pip install numpy scipy torch torchvision torchaudio opencv-python-headless \
 # then separately build/install Prophesee OpenEB (metavision_core, metavision_hal, ...)
 ```
 
+[`src/stardist_segmentation_my_scan.ipynb`](src/stardist_segmentation_my_scan.ipynb) (see
+[Segmentation](#segmentation) below) depends on
+[StarDist](https://github.com/stardist/stardist)/CSBDeep and TensorFlow, which pin an
+older NumPy than the `event` env above — it was run in a separate `stardist` conda
+environment (Python 3.9):
+
+| Package | Version |
+|---|---|
+| stardist | 0.9.2 |
+| csbdeep | 0.8.2 |
+| tensorflow | 2.10.1 |
+| numpy | 1.23.5 |
+
+```bash
+conda create -n stardist python=3.9
+conda activate stardist
+pip install stardist csbdeep "tensorflow==2.10.1" "numpy<2"
+```
+
 ## Simulation: Event Scan and Reconstruction
 
 [`src/scan_simulation.ipynb`](src/scan_simulation.ipynb) simulates an event-camera-style
