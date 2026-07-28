@@ -1,5 +1,10 @@
 # neeha-public
 
+The full data and results (including files too large for git) are hosted on Google
+Drive:
+- [Raw event scan data](https://drive.google.com/drive/folders/1UcL-1i2yeQuqwwhz2gfKMWoPpf0kqWEy?usp=drive_link)
+- [Segmentation data and results](https://drive.google.com/drive/folders/1GE5i_M013WhExqis7vumaZY_hKbx43nP?usp=sharing)
+
 ## Environment
 
 The notebooks/scripts in this repo were developed and run against the `event` conda
@@ -209,3 +214,42 @@ together with an overlap-count accumulator. Patches with very low dynamic range 
 already bright (`range < 0.15` and `min > 0.5`) are saturated to white instead of being
 over-stretched. The result is written to
 `results/grayscale_example/reconstruction_l1/test_shift_reconstructed_auto_hdr_optimized.png`.
+
+## Segmentation
+
+[`src/stardist_segmentation_my_scan.ipynb`](src/stardist_segmentation_my_scan.ipynb) runs
+nucleus/cell instance segmentation directly on the reconstructed gradient images using
+[StarDist2D](https://github.com/stardist/stardist), a CSBDeep/TensorFlow-based model
+originally pretrained for H&E-stained histology.
+
+**Models.** Two finetuned StarDist2D checkpoints are provided under `model/`:
+- `model/finetuned_he_experiment` — finetuned using only the x-gradient channel.
+- `model/finetuned_he_experiment_xy` — finetuned using both x- and y-gradient channels.
+
+The notebook loads a model by folder name (`StarDist2D(None, "finetuned_he_experiment",
+"../model/")` in cell 2); swap in `"finetuned_he_experiment_xy"` to use the xy-trained
+checkpoint instead (the commented-out `_xy` loading code adjusts the corresponding
+image-stacking logic in the segmentation loop below it).
+
+**Example data**, under `data/segmentation_example/`:
+- `my_scan_cropped_from_leica_events/` — a small **synthetic** example (simulated event
+  gradients cropped from a Leica-scanned slide image), committed directly in git.
+- `my_scan_events/` — a **real-world** event-camera scan (`test_shift_x.npy` /
+  `test_shift_y_warp.npy`, ~128MB each). These exceed GitHub's size limits and are
+  excluded via `.gitignore`; download them from the
+  [segmentation Google Drive folder](https://drive.google.com/drive/folders/1GE5i_M013WhExqis7vumaZY_hKbx43nP?usp=sharing)
+  and place them at `data/segmentation_example/my_scan_events/<slice_id>/`.
+
+**Pipeline.** For each slice-id subfolder under the chosen input folder:
+1. Load the `*_x.npy` gradient array and rescale it to `[0, 1]`
+   (`slice_x / abs(slice_x).max() / 2 + 0.5`), then replicate it across 3 channels to
+   match the model's RGB-style input (the y-gradient and gradient-magnitude channels are
+   available but commented out, for use with the `_xy` model).
+2. Run `model.predict_instances` to get per-pixel instance labels. Real-world scans need
+   `scale`/`prob_thresh` tuned for good results (the notebook uses `scale=0.5777**2,
+   prob_thresh=0.1`); synthetic data works with the model's default parameters.
+3. Extract instance boundaries (`skimage.segmentation.find_boundaries`), dilate them for
+   visibility (`binary_dilation`), and overlay them in red on the rescaled input image.
+4. **Outputs**, written to `results/segmentation_example/<slice_id>/`:
+   `<n>_leica_outline.png` — the input image with segmented cell/nucleus boundaries
+   drawn in red.
